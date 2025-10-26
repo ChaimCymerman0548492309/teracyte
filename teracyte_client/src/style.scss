@@ -1,0 +1,6 @@
+﻿:root { --accent:#0066cc; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: #fff; color: #222; }
+h2, h3 { color: var(--accent); }
+input, button { padding: 8px 10px; }
+button { cursor: pointer; }

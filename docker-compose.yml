@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./teracyte_server
+    container_name: teracyte_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./teracyte_server/data.db:/app/data.db
+    restart: unless-stopped
+
+  frontend:
+    build: ./teracyte_client
+    container_name: teracyte_frontend
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped

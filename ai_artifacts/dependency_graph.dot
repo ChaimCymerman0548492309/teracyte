@@ -1,0 +1,6 @@
+graph {
+  server_app -> routes_auth;
+  routes_auth -> auth_client;
+  auth_client -> models;
+  models -> db;
+}

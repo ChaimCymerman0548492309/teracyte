@@ -1,8 +1,12 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import api from "./lib/api";
+import { db } from "./lib/db";
+import { useLiveQuery } from "dexie-react-hooks";
 import type { ImagePayload, ResultsPayload, TokenPair } from "./types";
 import Histogram from "./components/Histogram";
 import ImagePanel from "./components/ImagePanel";
+import HistoryPanel from "./components/HistoryPanel";
+import StatsPanel from "./components/StatsPanel";
 import {
   Button,
   TextField,
@@ -10,6 +14,8 @@ import {
   Alert,
   CircularProgress,
   Typography,
+  Paper,
+  Box,
 } from "@mui/material";
 import "./App.css";
 
@@ -24,10 +30,17 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const lastImageId = useRef<string | null>(null);
 
+  const history = useLiveQuery(() =>
+    db.images.orderBy("timestamp").reverse().limit(10).toArray()
+  );
+
   async function login() {
     try {
       setLoading(true);
-      const { data } = await api.post<TokenPair>("/api/auth/login", { username, password });
+      const { data } = await api.post<TokenPair>("/api/auth/login", {
+        username,
+        password,
+      });
       setTokens(data);
       setMsg("✅ Connected successfully");
       setStatus("ok");
@@ -51,14 +64,26 @@ export default function App() {
     if (!tokens) return;
     try {
       const imgRes = await api.get<ImagePayload>("/api/image");
-      if (imgRes.data?.image_id && imgRes.data.image_id !== lastImageId.current) {
+      if (
+        imgRes.data?.image_id &&
+        imgRes.data.image_id !== lastImageId.current
+      ) {
         lastImageId.current = imgRes.data.image_id;
         setImage(imgRes.data);
         const resRes = await api.get<ResultsPayload>("/api/results");
         setResults(resRes.data);
+
+        // שמירה ל־IndexedDB
+        await db.images.put({
+          image_id: imgRes.data.image_id,
+          intensity_average: resRes.data.intensity_average,
+          focus_score: resRes.data.focus_score,
+          classification_label: resRes.data.classification_label,
+          timestamp: Date.now(),
+        });
       }
     } catch (e) {
-      console.error(e);
+      console.error("Error fetching image/results:", e);
     }
   }
 
@@ -74,12 +99,23 @@ export default function App() {
       </Typography>
 
       {tokens ? (
-        <div className={`status-bar ${status === "ok" ? "status-ok" : "status-error"}`}>
+        <Paper
+          elevation={3}
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            p: 1.5,
+            my: 1.5,
+            backgroundColor: status === "ok" ? "#2e7d32" : "#c62828",
+            color: "white",
+          }}
+        >
           <span>{msg || "Connected"}</span>
           <Button variant="contained" color="error" onClick={logout}>
-            Logout
+            LOGOUT
           </Button>
-        </div>
+        </Paper>
       ) : (
         <form
           onSubmit={(e) => {
@@ -113,12 +149,13 @@ export default function App() {
       )}
 
       {tokens && (
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
-          <div className="panel">
+        <Box sx={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 2 }}>
+          <Paper sx={{ p: 2 }}>
             <ImagePanel image={image} />
-          </div>
-          <div style={{ display: "grid", gap: 12 }}>
-            <div className="panel">
+          </Paper>
+
+          <Box sx={{ display: "grid", gap: 2 }}>
+            <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Metrics
               </Typography>
@@ -131,15 +168,23 @@ export default function App() {
               ) : (
                 <div>Waiting for results...</div>
               )}
-            </div>
-            <div className="panel">
+            </Paper>
+
+            <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Histogram
               </Typography>
-              {results ? <Histogram bins={results.histogram} /> : <div>Waiting...</div>}
-            </div>
-          </div>
-        </div>
+              {results ? (
+                <Histogram bins={results.histogram} />
+              ) : (
+                <div>Waiting...</div>
+              )}
+            </Paper>
+
+            {history && <HistoryPanel history={history} />}
+            {history && <StatsPanel history={history} />}
+          </Box>
+        </Box>
       )}
 
       <Snackbar
@@ -156,7 +201,7 @@ export default function App() {
           <Alert severity="error" sx={{ width: "100%" }}>
             {msg}
           </Alert>
-        ) : null}
+        ) : undefined}
       </Snackbar>
     </div>
   );
